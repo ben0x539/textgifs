@@ -76,6 +76,18 @@ fn show(width: u16, buf: &[char]) {
     }
 }
 
+fn uninterlace(y: usize, h: usize) -> usize {
+    let r = y * 8;
+    if r < h { return r; }
+    let r = (y - (h + 7) / 8) * 8 + 4;
+    if r < h { return r; }
+    let r = (y - (h + 3) / 4) * 4 + 2;
+    if r < h { return r; }
+    let r = (y - (h + 1) / 2) * 2 + 1;
+    if r < h { return r; }
+    panic!("welp");
+}
+
 fn process(p: &path::Path) -> Result<(), Err> {
     let file = try!(fs::File::open(p));
     let mut decoder = try!(gif::Decoder::new(file).read_info());
@@ -89,11 +101,15 @@ fn process(p: &path::Path) -> Result<(), Err> {
     while let Some(frame) = try!(decoder.read_next_frame()) {
         let palette = frame.palette.as_ref().unwrap_or(&global_palette);
         let bg = frame.transparent.map(|bg| bg as usize).or(global_bg);
-        for frame_x in 0 .. frame.width as usize {
-            let image_x = frame_x + frame.left as usize;
-            for frame_y in 0 .. frame.height as usize {
+        for frame_y in 0 .. frame.height as usize {
+            let image_y = if frame.interlaced {
+                uninterlace(frame_y, frame.height as usize)
+            } else {
+                frame_y
+            } + frame.top as usize;
+            for frame_x in 0 .. frame.width as usize {
+                let image_x = frame_x + frame.left as usize;
                 let frame_i = frame_x + frame_y * frame.width as usize;
-                let image_y = frame_y + frame.top as usize;
                 let image_i = image_x + image_y * width as usize;
 
                 let index = frame.buffer[frame_i] as usize;
